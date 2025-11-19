@@ -10,6 +10,7 @@ import {
   ReferenceArrayInput,
   ReferenceInput,
   SearchInput,
+  usePermissions,
   useRefresh,
   useTranslate,
   useVersion,
@@ -41,9 +42,14 @@ const useStyles = makeStyles({
   },
 })
 
+const formatReleaseType = (record) =>
+  record?.tagValue ? humanize(record?.tagValue) : '-- None --'
+
 const AlbumFilter = (props) => {
   const classes = useStyles()
   const translate = useTranslate()
+  const { permissions } = usePermissions()
+  const isAdmin = permissions === 'admin'
   return (
     <Filter {...props} variant={'outlined'}>
       <SearchInput id="search" source="name" alwaysOn />
@@ -139,9 +145,7 @@ const AlbumFilter = (props) => {
       >
         <AutocompleteInput
           emptyText="-- None --"
-          optionText={(record) =>
-            record?.tagValue ? humanize(record?.tagValue) : '-- None --'
-          }
+          optionText={formatReleaseType}
         />
       </ReferenceInput>
       <NullableBooleanInput source="compilation" />
@@ -153,6 +157,7 @@ const AlbumFilter = (props) => {
           defaultValue={true}
         />
       )}
+      {isAdmin && <NullableBooleanInput source="missing" />}
     </Filter>
   )
 }

@@ -59,6 +59,7 @@ export const SongInfo = (props) => {
   ]
   const data = {
     path: <PathField />,
+    libraryName: <TextField source="libraryName" />,
     album: (
       <AlbumLinkField source="album" sortByOrder={'ASC'} record={record} />
     ),
@@ -75,6 +76,7 @@ export const SongInfo = (props) => {
     compilation: <BooleanField source="compilation" />,
     bitRate: <BitrateField source="bitRate" />,
     bitDepth: <NumberField source="bitDepth" />,
+    sampleRate: <NumberField source="sampleRate" />,
     channels: <NumberField source="channels" />,
     size: <SizeField source="size" />,
     updatedAt: <DateField source="updatedAt" showTime />,
@@ -92,7 +94,14 @@ export const SongInfo = (props) => {
     roles.push([name, record.participants[name].length])
   }
 
-  const optionalFields = ['discSubtitle', 'comment', 'bpm', 'genre', 'bitDepth']
+  const optionalFields = [
+    'discSubtitle',
+    'comment',
+    'bpm',
+    'genre',
+    'bitDepth',
+    'sampleRate',
+  ]
   optionalFields.forEach((field) => {
     !record[field] && delete data[field]
   })
@@ -130,7 +139,7 @@ export const SongInfo = (props) => {
         </Tabs>
       )}
       <div
-        hidden={tab == 1}
+        hidden={tab === 1}
         id="mapped-tags-body"
         aria-labelledby={record.rawTags ? 'mapped-tags-tab' : undefined}
       >

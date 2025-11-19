@@ -1,17 +1,21 @@
 package artwork
 
 import (
+	"cmp"
 	"context"
 	"crypto/md5"
 	"fmt"
 	"io"
 	"path/filepath"
+	"slices"
 	"strings"
 	"time"
 
 	"github.com/Masterminds/squirrel"
+	"github.com/maruel/natural"
 	"github.com/navidrome/navidrome/conf"
 	"github.com/navidrome/navidrome/core"
+	"github.com/navidrome/navidrome/core/external"
 	"github.com/navidrome/navidrome/core/ffmpeg"
 	"github.com/navidrome/navidrome/model"
 )
@@ -19,14 +23,14 @@ import (
 type albumArtworkReader struct {
 	cacheKey
 	a          *artwork
-	em         core.ExternalMetadata
+	provider   external.Provider
 	album      model.Album
 	updatedAt  *time.Time
 	imgFiles   []string
 	rootFolder string
 }
 
-func newAlbumArtworkReader(ctx context.Context, artwork *artwork, artID model.ArtworkID, em core.ExternalMetadata) (*albumArtworkReader, error) {
+func newAlbumArtworkReader(ctx context.Context, artwork *artwork, artID model.ArtworkID, provider external.Provider) (*albumArtworkReader, error) {
 	al, err := artwork.ds.Album(ctx).Get(artID.ID)
 	if err != nil {
 		return nil, err
@@ -37,7 +41,7 @@ func newAlbumArtworkReader(ctx context.Context, artwork *artwork, artID model.Ar
 	}
 	a := &albumArtworkReader{
 		a:          artwork,
-		em:         em,
+		provider:   provider,
 		album:      *al,
 		updatedAt:  imagesUpdateAt,
 		imgFiles:   imgFiles,
@@ -82,7 +86,7 @@ func (a *albumArtworkReader) fromCoverArtPriority(ctx context.Context, ffmpeg ff
 			embedArtPath := filepath.Join(a.rootFolder, a.album.EmbedArtPath)
 			ff = append(ff, fromTag(ctx, embedArtPath), fromFFmpegTag(ctx, ffmpeg, embedArtPath))
 		case pattern == "external":
-			ff = append(ff, fromAlbumExternalSource(ctx, a.album, a.em))
+			ff = append(ff, fromAlbumExternalSource(ctx, a.album, a.provider))
 		case len(a.imgFiles) > 0:
 			ff = append(ff, fromExternalFile(ctx, a.imgFiles, pattern))
 		}
@@ -112,5 +116,32 @@ func loadAlbumFoldersPaths(ctx context.Context, ds model.DataStore, albums ...mo
 			imgFiles = append(imgFiles, filepath.Join(path, img))
 		}
 	}
+
+	// Sort image files to ensure consistent selection of cover art
+	// This prioritizes files without numeric suffixes (e.g., cover.jpg over cover.1.jpg)
+	// by comparing base filenames without extensions
+	slices.SortFunc(imgFiles, compareImageFiles)
+
 	return paths, imgFiles, &updatedAt, nil
+}
+
+// compareImageFiles compares two image file paths for sorting.
+// It extracts the base filename (without extension) and compares case-insensitively.
+// This ensures that "cover.jpg" sorts before "cover.1.jpg" since "cover" < "cover.1".
+// Note: This function is called O(n log n) times during sorting, but in practice albums
+// typically have only 1-20 image files, making the repeated string operations negligible.
+func compareImageFiles(a, b string) int {
+	// Case-insensitive comparison
+	a = strings.ToLower(a)
+	b = strings.ToLower(b)
+
+	// Extract base filenames without extensions
+	baseA := strings.TrimSuffix(filepath.Base(a), filepath.Ext(a))
+	baseB := strings.TrimSuffix(filepath.Base(b), filepath.Ext(b))
+
+	// Compare base names first, then full paths if equal
+	return cmp.Or(
+		natural.Compare(baseA, baseB),
+		natural.Compare(a, b),
+	)
 }
